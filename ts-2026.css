@@ -115,8 +115,13 @@ h3.dates-under-timer { font-size: 35px!important; line-height: 40px!important; f
 .video-wrapper.is-paused .video-controls { opacity: 1; pointer-events: auto; }
 .ctrl-btn { background: none; border: none; cursor: pointer; padding: 4px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
 .ctrl-btn svg { width: 20px; height: 20px; fill: #fff; }
-.video-progress { flex: 1; height: 4px; background: rgba(255,255,255,0.3); border-radius: 2px; cursor: pointer; position: relative; }
-.video-progress-fill { height: 100%; background: #fff; border-radius: 2px; width: 0%; pointer-events: none; }
+.video-progress { position: relative; flex: 1; height: 4px; border-radius: 2px; background: rgba(255, 255, 255, 0.3); cursor: pointer; touch-action: none; }
+.video-progress::before { content: ""; position: absolute; left: 0; right: 0; top: -11px; bottom: -11px; }
+.video-progress:focus-visible { outline: 2px solid #fff; outline-offset: 6px; }
+.video-progress-fill { height: 100%; width: 0; border-radius: 2px; background: #fff; pointer-events: none; }
+.video-progress-knob { position: absolute; top: 50%; left: 0; width: 13px; height: 13px; margin-left: -6.5px; border-radius: 50%; background: #fff; pointer-events: none; transform: translateY(-50%) scale(0); transition: transform 0.15s ease; }
+.video-controls:hover .video-progress-knob, .video-progress.is-scrubbing .video-progress-knob { transform: translateY(-50%) scale(1); }
+.video-progress.is-scrubbing { cursor: grabbing; }
 .ctrl-time { color: #fff; font-size: 12px!important; white-space: nowrap; font-family: sans-serif; }
 .ctrl-mute { margin-left: auto; }
 
