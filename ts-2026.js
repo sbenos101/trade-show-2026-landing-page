@@ -438,9 +438,19 @@ if (giveawayBtns.length) {
 
     const progress = document.createElement('div');
     progress.className = 'video-progress';
+    progress.setAttribute('role', 'slider');
+    progress.setAttribute('aria-label', 'Seek');
+    progress.setAttribute('aria-valuemin', '0');
+    progress.setAttribute('aria-valuemax', '100');
+    progress.setAttribute('aria-valuenow', '0');
+    progress.tabIndex = 0;
+    progress.style.touchAction = 'none';
+
     const fill = document.createElement('div');
     fill.className = 'video-progress-fill';
-    progress.appendChild(fill);
+    const knob = document.createElement('div');
+    knob.className = 'video-progress-knob';
+    progress.append(fill, knob);
 
     const time = document.createElement('span');
     time.className = 'ctrl-time';
@@ -457,46 +467,86 @@ if (giveawayBtns.length) {
     controls.append(playBtn, progress, time, muteBtn);
     wrapper.appendChild(controls);
 
-    video.addEventListener('timeupdate', () => {
-      if (!video.duration) return;
-      fill.style.width = (video.currentTime / video.duration * 100) + '%';
-      time.textContent = formatTime(video.currentTime) + ' / ' + formatTime(video.duration);
+    let scrubbing = false;
+    let wasPlaying = false;
+    let pendingRatio = null;
+    let rafPending = false;
+
+    function paint(ratio, seconds) {
+      const pct = ratio * 100;
+      fill.style.width = pct + '%';
+      knob.style.left = pct + '%';
+      progress.setAttribute('aria-valuenow', Math.round(pct));
+      time.textContent = formatTime(seconds) + ' / ' + formatTime(video.duration || 0);
+    }
+
+    function commitSeek() {
+      rafPending = false;
+      if (pendingRatio === null) return;
+      video.currentTime = pendingRatio * video.duration;
+      pendingRatio = null;
+    }
+
+    function seekFromEvent(e) {
+      if (!video.duration || !isFinite(video.duration)) return;
+      const rect = progress.getBoundingClientRect();
+      const ratio = Math.max(0, Math.min((e.clientX - rect.left) / rect.width, 1));
+      pendingRatio = ratio;
+      paint(ratio, ratio * video.duration);
+      if (!rafPending) { rafPending = true; requestAnimationFrame(commitSeek); }
+    }
+
+    function endScrub(e) {
+      if (!scrubbing) return;
+      scrubbing = false;
+      progress.classList.remove('is-scrubbing');
+      commitSeek();
+      if (e && progress.hasPointerCapture && progress.hasPointerCapture(e.pointerId)) progress.releasePointerCapture(e.pointerId);
+      if (wasPlaying) video.play().catch(() => {});
+    }
+
+    progress.addEventListener('pointerdown', e => {
+      if (e.button !== undefined && e.button !== 0) return;
+      e.stopPropagation();
+      e.preventDefault();
+      scrubbing = true;
+      progress.classList.add('is-scrubbing');
+      wasPlaying = !video.paused;
+      video.pause();
+      progress.setPointerCapture(e.pointerId);
+      seekFromEvent(e);
     });
 
-   let scrubbing = false;
-let wasPlaying = false;
+    progress.addEventListener('pointermove', e => {
+      if (!scrubbing) return;
+      e.preventDefault();
+      seekFromEvent(e);
+    });
 
-function seekFromEvent(e) {
-  if (!video.duration || !isFinite(video.duration)) return;
-  const rect = progress.getBoundingClientRect();
-  const ratio = Math.max(0, Math.min((e.clientX - rect.left) / rect.width, 1));
-  video.currentTime = ratio * video.duration;
-  fill.style.width = (ratio * 100) + '%';
-  time.textContent = formatTime(video.currentTime) + ' / ' + formatTime(video.duration);
-}
+    progress.addEventListener('pointerup', endScrub);
+    progress.addEventListener('pointercancel', endScrub);
+    progress.addEventListener('lostpointercapture', endScrub);
+    progress.addEventListener('click', e => e.stopPropagation());
 
-progress.addEventListener('pointerdown', e => {
-  e.stopPropagation();
-  e.preventDefault();
-  scrubbing = true;
-  wasPlaying = !video.paused;
-  video.pause();
-  progress.setPointerCapture(e.pointerId);
-  seekFromEvent(e);
-});
+    progress.addEventListener('keydown', e => {
+      if (!video.duration || !isFinite(video.duration)) return;
+      let t = video.currentTime;
+      if (e.key === 'ArrowLeft') t -= 5;
+      else if (e.key === 'ArrowRight') t += 5;
+      else if (e.key === 'Home') t = 0;
+      else if (e.key === 'End') t = video.duration;
+      else return;
+      e.preventDefault();
+      e.stopPropagation();
+      video.currentTime = Math.max(0, Math.min(t, video.duration));
+    });
 
-progress.addEventListener('pointermove', e => {
-  if (scrubbing) seekFromEvent(e);
-});
+    video.addEventListener('loadedmetadata', () => paint(0, 0));
 
-progress.addEventListener('pointerup', e => {
-  if (!scrubbing) return;
-  scrubbing = false;
-  progress.releasePointerCapture(e.pointerId);
-  if (wasPlaying) video.play().catch(() => {});
-});
-
-progress.addEventListener('click', e => e.stopPropagation());
+    video.addEventListener('timeupdate', () => {
+      if (scrubbing || !video.duration) return;
+      paint(video.currentTime / video.duration, video.currentTime);
+    });
 
     playBtn.addEventListener('click', e => {
       e.stopPropagation();
@@ -515,7 +565,7 @@ progress.addEventListener('click', e => e.stopPropagation());
 
     video.addEventListener('ended', () => {
       video.currentTime = 0;
-      fill.style.width = '0%';
+      paint(0, 0);
       updatePlayBtn(playBtn, true);
     });
   }
@@ -807,7 +857,7 @@ function initializeProductCarousel() {
     window.addEventListener('resize', () => products.forEach(material => updateCarousel(material)));
     products.forEach(material => updateCarousel(material));
   }
-  
+
   // ─── DOMContentLoaded ───
 
   document.addEventListener('DOMContentLoaded', function () {
